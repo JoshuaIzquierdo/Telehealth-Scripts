@@ -1,0 +1,152 @@
+import os
+import pymysql
+import pandas as pd
+import pymysql
+import pymongo
+import pyodbc
+from datetime import datetime, timedelta
+import base64
+import json
+import urllib.request as urllib
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import (
+    Mail, Attachment, FileContent, FileName,
+    FileType, Disposition, ContentId)
+
+### Ingredients
+from cryptography.fernet import Fernet
+from datetime import datetime
+import configparser
+import codecs
+
+import pandas as pd
+from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow,Flow
+from google.auth.transport.requests import Request
+import os
+import pickle
+import numpy as np
+
+#GET Raw Data from Provider Utilization Workbook 
+
+SAMPLE_SPREADSHEET_ID_input = '1QEDL7dQ-viMEXr0hIbimm5hs96pkoohAbkqEebHPLkw'
+
+
+#change the range if needed
+SAMPLE_RANGE_NAME_Updated = 'Raw Data'
+
+
+def Create_Service(client_secret_file, api_service_name, api_version, *scopes):
+    global service
+    SCOPES = [scope for scope in scopes[0]]
+    #print(SCOPES)
+    
+    cred = None
+
+    if os.path.exists('token_write.pickle'):
+        with open('token_write.pickle', 'rb') as token:
+           cred = pickle.load(token)
+
+    if not cred or not cred.valid:
+        if cred and cred.expired and cred.refresh_token:
+            cred.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(client_secret_file, SCOPES)
+            cred = flow.run_local_server()
+
+        with open('token_write.pickle', 'wb') as token:
+            pickle.dump(cred, token)
+
+    try:
+        service = build(api_service_name, api_version, credentials=cred)
+        print(api_service_name, 'service created successfully')
+        #return service
+    except Exception as e:
+        print(e)
+        #return None
+        
+# change 'my_json_file.json' by your downloaded JSON file.
+Create_Service('credentials.json', 'sheets', 'v4',['https://www.googleapis.com/auth/spreadsheets'])
+
+#Clear Values in Spreadsheet
+table = service.spreadsheets( ).values( ).get( spreadsheetId=SAMPLE_SPREADSHEET_ID_input, range=SAMPLE_RANGE_NAME_Updated,
+                                                       ).execute( )
+
+
+df = pd.DataFrame(table.get("values")[1:], columns=table.get("values")[0])
+
+#GET DATE INTO dosdf 
+dosdf = df[['Date of Service']]
+
+#SORT DATA BY COLUMN B & A (PROVIDER NAME, DATE, AND HIERARCHY LEVEL) 
+df = df.sort_values(by=['B','A'], ascending = [True, False])
+
+#DROP LAST RECORD IF DUPLICATE
+df = df.drop_duplicates(subset='B', keep='last', inplace=False, ignore_index=False)
+
+#CONVERT DATE INTO DATETIME FORMAT TO BE CONVERTED CORRECTLY
+df['Dates'] = pd.to_datetime(dosdf['Date of Service'], format = '%m/%d/%Y %H:%M:%S')
+
+df['Date'] = df['Dates'].dt.strftime('%m/%d')
+df['Time'] = df['Dates'].dt.strftime('%H:%M:%S')
+df['First_day'] = df['Dates'] - df['Dates'].dt.weekday * np.timedelta64(1, 'D')
+df['First Day'] = df['First_day'].dt.strftime('%m/%d/%Y')
+df['Week Of'] = df['First_day'] -  pd.to_timedelta(1, unit='d')
+df['Week Of'] = df['Week Of'].dt.strftime('%m/%d')
+
+#KEEP ONLY USEFUL COLUMNS AND REARANGEMENT OF COLUMNS
+df = df[["Full Name","Week Of","Date","Time","Office","Provider",	"Appt Profile",	"Appt Status",	"Reason","Duration"]]
+import pandas as pd
+from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow,Flow
+from google.auth.transport.requests import Request
+import os
+import pickle
+
+#EXPORT DATA INTO 'ALL STATES FOUR WEEK FORCAST DATA' 
+SAMPLE_SPREADSHEET_ID_input = '1QEDL7dQ-viMEXr0hIbimm5hs96pkoohAbkqEebHPLkw'
+#change the range if needed
+SAMPLE_RANGE_NAME_RAW = 'All States four week forecast data!A1'
+
+def Create_Service(client_secret_file, api_service_name, api_version, *scopes):
+    global service
+    SCOPES = [scope for scope in scopes[0]]
+    #print(SCOPES)
+    cred = None
+    if os.path.exists('token_write.pickle'):
+        with open('token_write.pickle', 'rb') as token:
+            cred = pickle.load(token)
+    if not cred or not cred.valid:
+        if cred and cred.expired and cred.refresh_token:
+            cred.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(client_secret_file, SCOPES)
+            cred = flow.run_local_server()
+        with open('token_write.pickle', 'wb') as token:
+            pickle.dump(cred, token)
+    try:
+        service = build(api_service_name, api_version, credentials=cred)
+        print(api_service_name, 'service created successfully')
+        #return service
+    except Exception as e:
+        print(e)
+        #return None
+# change 'my_json_file.json' by your downloaded JSON file.
+Create_Service('credentials.json', 'sheets', 'v4',['https://www.googleapis.com/auth/spreadsheets'])
+
+#Clear Values in Spreadsheet
+service.spreadsheets( ).values( ).clear( spreadsheetId=SAMPLE_SPREADSHEET_ID_input, range=SAMPLE_RANGE_NAME_RAW,
+                                                       ).execute( )
+def RAW_Data_truepill_SH():
+    response_date = service.spreadsheets().values().update(
+        spreadsheetId=SAMPLE_SPREADSHEET_ID_input,
+        valueInputOption='RAW',
+        range=SAMPLE_RANGE_NAME_RAW,
+        body=dict(
+            majorDimension='ROWS',
+            values=df.T.reset_index().T.values.tolist())
+    ).execute()
+    print('RAW_Data successfully Updated')
+
+RAW_Data_truepill_SH()
+
