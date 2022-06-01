@@ -1,0 +1,27 @@
+with AHEAD_DATA AS (
+SELECT Ahead_appts.*,CONCAT(providers.first_name, ' ',providers.last_name, ', ',providers.credentials) AS provider, 'Ahead' AS Program_Name, APPT_STATUS_ID, Statuses.Name as Visit
+FROM "STITCH"."AHEADDB"."APPOINTMENTS_V2" AS Ahead_appts
+
+LEFT JOIN "STITCH"."AHEADDB"."APPOINTMENT_STATUSES" as Statuses
+on Ahead_appts.APPT_STATUS_ID = Statuses.ID
+  
+LEFT JOIN "STITCH"."AHEADDB"."PROVIDERS" AS PROVIDERS
+ON Ahead_appts.PROVIDER_ID = PROVIDERS.ID
+WHERE NOT (PROVIDER LIKE '%test%')
+
+
+)
+SELECT Program_Name AS Program, Provider,
+SUM(Completed_visits) AS "Completed Visits",SUM(Completed_Visits + Rescheduled) AS "Scheduled", SUM(Cancelled) AS "Cancelled Visits",SUM(NO_SHOWS) AS "No Shows"
+FROM(
+SELECT Program_Name, Provider, 
+count(CASE WHEN visit like 'Complete' then 1 else null end) AS Completed_visits,
+count(CASE WHEN visit like 'Cancelled' then 1 else null end) AS Cancelled,
+count(CASE WHEN visit LIKE 'No Show' THEN 1 else null end) AS NO_SHOWS,
+count(CASE WHEN VISIT LIKE '%Reschedule%' THEN 1 else null end) AS Rescheduled
+FROM AHEAD_DATA
+  where not(provider like ('%TEST%') or (provider like ('%test%')) or  (provider like ('%Test%')))
+GROUP BY Program_Name, Provider
+  )
+  GROUP BY Program_Name, Provider
+  ORDER BY PROGRAM_NAME,Provider
