@@ -1,0 +1,24 @@
+WITH Acuity_DATA AS (
+SELECT Acuity_appts.*,CONCAT(providers.first_name, ' ',providers.last_name, ', ',providers.credentials) AS provider, 'Ahead Light' AS Program_Name, APPOINTMENT_STATUS_ID, Statuses.Name as Visit, NO_SHOW as No_SHOW_Visits
+
+FROM "STITCH"."AHEADDB"."ACUITY_APPOINTMENTS" AS Acuity_appts
+
+LEFT JOIN "STITCH"."AHEADDB"."APPOINTMENT_STATUSES" as Statuses
+on Acuity_appts.APPOINTMENT_STATUS_ID = Statuses.ID
+  
+LEFT JOIN "STITCH"."AHEADDB"."PROVIDERS" AS PROVIDERS
+ON Acuity_appts.PROVIDER_ID = PROVIDERS.ID
+  WHERE NOT (PROVIDER LIKE '%test%')
+)
+SELECT Program_Name AS Program, provider, sum(completed_visits) as "Completed Visits", sum(completed_visits + Rescheduled) AS "Scheduled", sum(NO_SHOWS) as "Cancelled", sum(NO_SHOWS) as "No Shows"
+FROM (
+SELECT Program_Name, provider, 
+count(CASE WHEN visit like 'Complete' then 1 else null end) AS Completed_visits,
+count(CASE WHEN visit like 'Cancelled' then 1 else null end) AS Cancelled,
+count(CASE WHEN NO_SHOW_Visits LIKE 'TRUE' THEN 1 else null end) AS NO_SHOWS,
+count(CASE WHEN VISIT LIKE '%Reschedule%' THEN 1 else null end) AS Rescheduled
+FROM Acuity_DATA 
+  where not(provider like ('%TEST%') or (provider like ('%test%')) or  (provider like ('%Test%')))
+GROUP BY Program_Name, provider 
+  ) GROUP BY Program_Name, provider 
+  ORDER BY Program_Name, provider 
